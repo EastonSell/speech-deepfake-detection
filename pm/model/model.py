@@ -5,8 +5,11 @@ import torch.nn.functional as F
 from torchmetrics import Accuracy
 
 
-class AudioClassifier(pl.LightningModule):
-    def __init__(self, num_classes=2, learning_rate=1e-3):
+import torch.nn as nn
+
+
+class AudioClassifier(nn.Module):
+    def __init__(self, num_classes=2):
         super().__init__()
 
         self.model = nn.Sequential(
@@ -19,6 +22,7 @@ class AudioClassifier(pl.LightningModule):
             nn.Flatten(),
             nn.Linear(16, num_classes),
         )
+        
 
         self.save_hyperparameters()
 
@@ -26,8 +30,10 @@ class AudioClassifier(pl.LightningModule):
         self.val_accuracy = Accuracy(task="multiclass", num_classes=num_classes)
         self.test_accuracy = Accuracy(task="multiclass", num_classes=num_classes)
 
+
     def forward(self, x):
         return self.model(x)
+
 
     def training_step(self, batch, batch_idx):
         x, y = batch
