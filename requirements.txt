@@ -1,0 +1,9 @@
+numpy
+torch
+soundfile
+ipykernel
+jupyter
+notebook
+matplotlib
+pytorch-lightning
+torchmetrics
