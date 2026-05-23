@@ -17,7 +17,6 @@ dependencies = [
     "jupyter",
     "notebook",
     "matplotlib",
-    "pytorch-lightning",
     "torchmetrics",
 ]
 
