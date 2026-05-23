@@ -1,7 +1,6 @@
 from pathlib import Path
-import wave
-
 import numpy as np
+import soundfile as sf
 import torch
 from torch.utils.data import DataLoader, Dataset
 
@@ -10,11 +9,12 @@ LABEL_TO_ID = {"spoof": 0, "bonafide": 1}
 
 
 class ASVspoofAudioDataset(Dataset):
-    def __init__(self, protocol_path=None, audio_dir=None, max_frames=96):
+    def __init__(self, protocol_path=None, audio_dir=None, max_frames=96, audio_ext=".wav"):
         asset_dir = Path(__file__).resolve().parents[2] / "assets"
         self.protocol_path = Path(protocol_path) if protocol_path else asset_dir / "trial_metadata.txt"
         self.audio_dir = Path(audio_dir) if audio_dir else asset_dir / "example_audio"
         self.max_frames = max_frames
+        self.audio_ext = audio_ext
         self.records = read_protocol(self.protocol_path)
 
     def __len__(self):
@@ -22,8 +22,8 @@ class ASVspoofAudioDataset(Dataset):
 
     def __getitem__(self, idx):
         record = self.records[idx]
-        audio_path = self.audio_dir / f"{record['trial_id']}.wav"
-        waveform, sample_rate = load_wav(audio_path)
+        audio_path = self.audio_dir / f"{record['trial_id']}{self.audio_ext}"
+        waveform, sample_rate = load_audio(audio_path)
         spectrogram = waveform_to_log_spectrogram(waveform, sample_rate)
         spectrogram = pad_or_crop(spectrogram, self.max_frames)
         label = LABEL_TO_ID[record["label"]]
@@ -38,6 +38,7 @@ def get_data_loaders(base_path=None, name="example", batch_size=2):
         dataset = ASVspoofAudioDataset(
             protocol_path=base_path / "trial_metadata.txt",
             audio_dir=base_path / "flac",
+            audio_ext=".flac",
         )
 
     return DataLoader(dataset, batch_size=batch_size, shuffle=True)
@@ -63,11 +64,11 @@ def read_protocol(protocol_path):
     return records
 
 
-def load_wav(path):
-    with wave.open(str(path), "rb") as f:
-        sample_rate = f.getframerate()
-        waveform = np.frombuffer(f.readframes(f.getnframes()), dtype="<i2")
-    return waveform.astype(np.float32) / 32768.0, sample_rate
+def load_audio(path):
+    waveform, sample_rate = sf.read(str(path), dtype="float32")
+    if waveform.ndim > 1:
+        waveform = waveform.mean(axis=1)
+    return waveform, sample_rate
 
 
 def waveform_to_log_spectrogram(waveform, sample_rate):
