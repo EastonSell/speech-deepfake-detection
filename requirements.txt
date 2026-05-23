@@ -5,5 +5,3 @@ ipykernel
 jupyter
 notebook
 matplotlib
-pytorch-lightning
-torchmetrics
