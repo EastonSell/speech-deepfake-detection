@@ -1,138 +1,93 @@
 # Speech Deepfake Detection
 
-DSCI 410L project milestone repository.
+## Project Purpose
 
-## Project Overview
+This project is a small speech deepfake detector. The goal is to take a short speech clip and predict whether it is `real` human speech or `fake` generated speech. I picked this topic because generated voices are getting easier to make, but it is still hard for people to know when an audio clip has been edited or created by a model. This project is not a full forensic system. It is a class project that tests whether a small neural network can learn useful patterns from audio spectrograms.
 
-This project investigates speech deepfake detection. The goal is to classify an audio clip as either bonafide human speech or spoofed/generated speech. The model input is unstructured speech audio converted into log-spectrogram features.
+The model turns each audio file into a log-spectrogram. A spectrogram is a picture of how the frequency content of the audio changes over time. The model then treats that spectrogram like a small image and classifies it with a simple convolutional neural network.
 
-## Data Overview
+## Dataset
 
-The full project will use ASVspoof Logical Access speech data.
+The full dataset is the ASVspoof 2021 Logical Access evaluation set. It contains real speech and many fake speech samples made with different text-to-speech and voice conversion systems. The project uses the challenge metadata file to connect each audio file to its label.
 
-- ASVspoof 2021 LA speech archive: https://zenodo.org/records/4837263
-- ASVspoof 2021 LA keys/metadata: https://www.asvspoof.org/asvspoof2021/LA-keys-full.tar.gz
-- ASVspoof challenge site: https://www.asvspoof.org/index2021.html
+The dataset code is in `pm/dataset/dataloader.py`. It reads an ASVspoof-style `trial_metadata.txt` file, loads WAV or FLAC audio, converts the audio to a log-spectrogram, pads or crops it to a fixed length, and returns PyTorch tensors. The dataloader maps the official dataset labels into the project labels: `real` and `fake`.
 
+The repo includes four tiny WAV files in `assets/example_audio/` and `assets/trial_metadata.txt` so the notebooks and training script can run immediately after cloning. The full audio archive is too large for normal GitHub storage, so it is not committed. After cloning on Talapas, put the data at the paths below.
 
-Low-quality and phone-quality audio will come from ASVspoof 2021 LA codec/transmission conditions. The metadata fields in this repo make it possible to compare model performance across these conditions.
+Data paths:
 
-![Train Batch](./assets/train_batch.png)
+- Full audio archive: `pm/dataset/ASVspoof2021_LA_eval.tar.gz`
+- Full keys archive: `pm/dataset/LA-keys-full.tar.gz`
+- Extracted audio folder: `pm/dataset/ASVspoof2021_LA_eval/flac/`
+- Metadata file used for training: `pm/dataset/ASVspoof2021_LA_eval/trial_metadata.txt`
+- Demo audio in the repo: `assets/example_audio/`
 
-## Methods Overview
+## Model
 
-The package includes:
+The model code is in `pm/model/model.py`. It is a compact CNN with two convolution layers, ReLU activations, pooling, and a final linear layer for the two classes. I used this model because it is simple enough to train quickly, but it still matches the shape of the problem: audio becomes a spectrogram, and the CNN looks for local frequency-time patterns that may separate real and fake speech.
 
-- `pm.dataset.dataloader`: ASVspoof protocol parser, WAV/FLAC audio loader, and PyTorch `DataLoader`
-- `pm.model`: a small CNN for log-spectrogram inputs
-- `pm.train_model`: a training loop for checking that the project is trainable
+![Example spectrogram batch](./assets/train_batch.png)
 
-## Results
+## Training
 
-In Progress
-
-## Conclusion
-
-In Progress
-
-## Installation
+Install the project from the repo root:
 
 ```bash
 pip install .
 ```
 
-## Package Use
-
-
-## Repository Layout
-
-- `pm/model/model.py` — the model: a compact 2-D CNN (`AudioClassifier`).
-- `pm/dataset/dataloader.py` — `ASVspoofAudioDataset`, the protocol parser, audio
-  loader, and spectrogram transform (the non-standard data loading).
-- `pm/train_model.py` — the training script (plain PyTorch, CLI).
-- `notebooks/data_demo.ipynb` — examples drawn from the dataset class.
-- `notebooks/evaluation.ipynb` — loads trained weights, predicts, and produces the
-  metrics and plots below.
-- `scripts/train_talapas.slurm` — example SLURM job for the cluster.
-
-## How to Train the Model
-
-Install the package, then run the training script.
+Run a quick check on the four demo clips:
 
 ```bash
-pip install .
+python -m pm.train_model --example --epochs 5 --batch-size 4 --val-frac 0.0
+```
 
-# 1) Quick sanity run on the four bundled clips (no download needed)
-python -m pm.train_model --example --epochs 15 --batch-size 4 --val-frac 0.0
+Run training interactively on Talapas after the full dataset is extracted:
 
-# 2) Full run on the extracted ASVspoof 2021 LA eval set (on Talapas)
+```bash
 python -m pm.train_model \
-    --data-dir pm/dataset/ASVspoof2021_LA_eval/flac \
-    --metadata pm/dataset/ASVspoof2021_LA_eval/trial_metadata.txt \
-    --audio-ext .flac \
-    --epochs 20 --batch-size 64 --balance \
-    --out pm/model/weights/model.pt
+  --data-dir pm/dataset/ASVspoof2021_LA_eval/flac \
+  --metadata pm/dataset/ASVspoof2021_LA_eval/trial_metadata.txt \
+  --audio-ext .flac \
+  --epochs 15 \
+  --batch-size 64 \
+  --balance \
+  --out pm/model/weights/model.pt
 ```
 
-`--balance` applies inverse-frequency class weights to offset ASVspoof's heavy
-spoof-to-bonafide imbalance. Training writes a `state_dict` to
-`pm/model/weights/model.pt`. On Talapas, submit the batch job with
-`sbatch scripts/train_talapas.slurm` (set your `--account`/PIRG inside the file first).
+The trained weights path is:
+
+```text
+pm/model/weights/model.pt
+```
+
+Weights are ignored by Git because real trained checkpoints can get large. After training on Talapas, keep or copy the weights at that path and point the evaluation notebook to it.
 
 ## Results
 
-**Proposed metrics.** The primary metric is **Equal Error Rate (EER)** — the operating
-point where the false-alarm rate (a real voice flagged as fake) equals the false-reject
-rate (a fake voice missed) — because EER is the standard ASVspoof score and is
-threshold-independent. Alongside it I report **accuracy, precision, recall, and F1**
-with spoof as the positive class. `compute_eer()` lives in `pm/train_model.py` and is
-imported by the evaluation notebook so training and evaluation use one definition.
+For the quick local result included in this repo, I trained the same model on a small balanced subset made from the local ASVspoof archives. After filtering unreadable local files, the subset had 604 usable clips. I used an 80/20 train/held-out split, so the numbers below are from 120 held-out clips. These are not final full-dataset results, but they show the pipeline works end to end.
 
-**Prediction visualization.** `notebooks/evaluation.ipynb` produces a confusion matrix
-and a per-clip panel of log-spectrograms annotated with true vs. predicted labels:
+| Metric | Value |
+| --- | ---: |
+| Equal Error Rate | 0.424 |
+| Accuracy | 0.525 |
+| Precision | 0.449 |
+| Recall | 0.620 |
+| F1 | 0.521 |
 
-![Model predictions on example clips](./assets/eval_figures/predictions.png)
+The main metric is Equal Error Rate because it is commonly used for speech fake detection. I also report accuracy, precision, recall, and F1 because they are easier to explain in the presentation. For this project, `fake` is treated as the positive class.
+
+![Prediction examples](./assets/eval_figures/predictions.png)
+
 ![Confusion matrix](./assets/eval_figures/confusion.png)
 
-The figures above are a **pipeline sanity-check on the four bundled clips**, not the
-reported test result — on four toy examples the model simply learns to call everything
-`spoof`. The full held-out ASVspoof eval numbers are produced by re-running the
-evaluation notebook against the cluster-trained weights, and go in this table:
+## Notebooks
 
-| Metric    | Value (full ASVspoof eval) |
-| --------- | -------------------------- |
-| EER       | _fill in after Talapas run_ |
-| Accuracy  | _fill in_ |
-| Precision | _fill in_ |
-| Recall    | _fill in_ |
-| F1        | _fill in_ |
+- `notebooks/data_demo.ipynb` shows examples from the dataset class and saves the spectrogram image used above.
+- `notebooks/evaluation.ipynb` loads trained weights, predicts labels, calculates metrics, and saves the result plots in `assets/eval_figures/`.
 
 ## Limitations and Use
 
-This is a deliberately small model on a fixed, short audio window, so it captures local
-spectral artifacts of synthesis but not long-range prosody, and it only sees the first
-~1 second of each clip. It is trained and evaluated on ASVspoof 2021 LA, so it learns
-the specific synthesis systems and channel conditions in that corpus; performance on
-unseen attack types or real-world recordings will be lower, and EER typically rises
-sharply under phone codecs. The detector outputs a probability, not proof — it is meant
-as a screening aid (prioritizing clips for human review or layering with other signals),
-**not** as a sole basis for accusing a recording of being fake or making automated
-high-stakes decisions about a person. It should not be relied on for forensic or legal
-conclusions.
+This model is intentionally small. It only looks at a short fixed window of each audio clip, so it may miss longer speech patterns. It is also trained on ASVspoof-style data, so it may not work as well on phone recordings, noisy real-world clips, or fake voices made by newer systems. The local result is only a small subset result. The full Talapas run should be used for the final presentation results.
 
-## Data and Weights Locations
-
-- **Data (Talapas):** download to `pm/dataset/ASVspoof2021_LA_eval.tar.gz`, extract to
-  `pm/dataset/ASVspoof2021_LA_eval/` (raw archives and `flac/` are git-ignored). Full
-  source links and extraction commands are in `pm/dataset/data.md`.
-- **Trained weights (Talapas):** `pm/model/weights/model.pt`, written by
-  `pm/train_model.py`. Weights are git-ignored (too large to version); the folder is
-  kept via `.gitkeep`.
-- **Bundled demo data (in repo):** `assets/example_audio/*.wav` +
-  `assets/trial_metadata.txt`.
-
-## Installation
-
-```bash
-pip install .
-```
+This detector should be used as a screening tool, not as proof that a recording is fake. A real system would need more data, stronger evaluation, and checks across different recording conditions before it could be trusted outside a class project.

@@ -1,27 +1,3 @@
-"""Train the speech deepfake detector.
-
-A self-contained PyTorch training loop (no PyTorch Lightning) so the project
-runs cleanly on the Talapas cluster with only the dependencies in
-``requirements.txt``.
-
-Run it as a script::
-
-    # quick sanity run on the four bundled example clips
-    python -m pm.train_model --example --epochs 5
-
-    # full run on ASVspoof 2021 LA eval (on Talapas, after extracting the data)
-    python -m pm.train_model \
-        --data-dir pm/dataset/ASVspoof2021_LA_eval/flac \
-        --metadata pm/dataset/ASVspoof2021_LA_eval/trial_metadata.txt \
-        --audio-ext .flac \
-        --epochs 20 --batch-size 64 --balance \
-        --out pm/model/weights/model.pt
-
-The trained weights are written to ``--out`` (default
-``pm/model/weights/model.pt``) as a plain ``state_dict`` that the evaluation
-notebook loads with ``model.load_state_dict(torch.load(...))``.
-"""
-
 from __future__ import annotations
 
 import argparse
@@ -39,17 +15,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_OUT = REPO_ROOT / "pm" / "model" / "weights" / "model.pt"
 
 
-# --------------------------------------------------------------------------- #
-# Metrics
-# --------------------------------------------------------------------------- #
 def compute_eer(scores, labels):
-    """Equal Error Rate -- the standard ASVspoof metric.
-
-    ``scores`` is P(spoof); ``labels`` is 1 for spoof (positive) else 0. The EER
-    is the operating point where the false-alarm rate (bonafide called spoof)
-    equals the false-reject rate (spoof called bonafide). We sweep every unique
-    score as a threshold and return the point where |FAR - FRR| is smallest.
-    """
     scores = np.asarray(scores, dtype=float)
     labels = np.asarray(labels, dtype=int)
     if len(np.unique(labels)) < 2:
@@ -57,48 +23,49 @@ def compute_eer(scores, labels):
 
     n_pos = max(int(np.sum(labels == 1)), 1)
     n_neg = max(int(np.sum(labels == 0)), 1)
-
     thresholds = np.sort(np.unique(scores))
-    best_eer, best_thr, best_gap = 1.0, float(thresholds[0]), float("inf")
+    best_eer = 1.0
+    best_thr = float(thresholds[0])
+    best_gap = float("inf")
+
     for thr in thresholds:
         pred_pos = scores >= thr
-        far = np.sum(pred_pos & (labels == 0)) / n_neg   # false alarm rate
-        frr = np.sum(~pred_pos & (labels == 1)) / n_pos  # false reject rate
+        far = np.sum(pred_pos & (labels == 0)) / n_neg
+        frr = np.sum(~pred_pos & (labels == 1)) / n_pos
         gap = abs(far - frr)
         if gap < best_gap:
             best_gap = gap
             best_eer = (far + frr) / 2.0
             best_thr = float(thr)
+
     return float(best_eer), best_thr
 
 
 @torch.no_grad()
 def evaluate(model, loader, device):
-    """Return (accuracy, eer) over a loader. Spoof (label id 0) is positive."""
     model.eval()
-    y_true, y_pred, y_score_spoof = [], [], []
+    y_true, y_pred, y_score_fake = [], [], []
+
     for x, y in loader:
         logits = model(x.to(device))
-        prob_spoof = torch.softmax(logits, dim=1)[:, LABEL_TO_ID["spoof"]].cpu()
+        prob_fake = torch.softmax(logits, dim=1)[:, LABEL_TO_ID["fake"]].cpu()
         y_pred += logits.argmax(1).cpu().tolist()
-        y_score_spoof += prob_spoof.tolist()
+        y_score_fake += prob_fake.tolist()
         y_true += [int(v) for v in y]
+
     acc = float(np.mean(np.array(y_pred) == np.array(y_true))) if y_true else float("nan")
-    spoof_indicator = [1 if t == LABEL_TO_ID["spoof"] else 0 for t in y_true]
-    eer, _ = compute_eer(y_score_spoof, spoof_indicator)
+    fake_indicator = [1 if t == LABEL_TO_ID["fake"] else 0 for t in y_true]
+    eer, _ = compute_eer(y_score_fake, fake_indicator)
     return acc, eer
 
 
-# --------------------------------------------------------------------------- #
-# Training
-# --------------------------------------------------------------------------- #
 def build_dataset(args):
     if args.example:
         return ASVspoofAudioDataset(max_frames=args.max_frames)
+
     if not args.data_dir or not args.metadata:
-        raise SystemExit(
-            "Provide --data-dir and --metadata (or use --example for the bundled clips)."
-        )
+        raise SystemExit("Provide --data-dir and --metadata, or use --example.")
+
     return ASVspoofAudioDataset(
         protocol_path=args.metadata,
         audio_dir=args.data_dir,
@@ -108,7 +75,6 @@ def build_dataset(args):
 
 
 def class_weights(dataset, device):
-    """Inverse-frequency weights to offset ASVspoof's heavy spoof/bonafide imbalance."""
     counts = np.zeros(len(LABEL_TO_ID), dtype=float)
     for rec in dataset.records:
         counts[LABEL_TO_ID[rec["label"]]] += 1
@@ -127,17 +93,19 @@ def train(args):
 
     dataset = build_dataset(args)
     if args.limit and args.limit < len(dataset):
-        dataset.records = dataset.records[: args.limit]  # deterministic smoke-test subset
+        dataset.records = dataset.records[: args.limit]
 
     n_val = int(len(dataset) * args.val_frac)
     if args.val_frac > 0 and len(dataset) > 1:
         n_val = max(1, min(n_val, len(dataset) - 1))
     else:
         n_val = 0
+
     n_train = len(dataset) - n_val
     if n_val > 0:
         train_ds, val_ds = random_split(
-            dataset, [n_train, n_val],
+            dataset,
+            [n_train, n_val],
             generator=torch.Generator().manual_seed(args.seed),
         )
     else:
@@ -170,6 +138,7 @@ def train(args):
             loss.backward()
             optimizer.step()
             running += loss.item() * x.size(0)
+
         train_loss = running / max(n_train, 1)
         val_acc, val_eer = evaluate(model, val_loader, device)
         print(
@@ -186,28 +155,21 @@ def train(args):
 
 def parse_args(argv=None):
     p = argparse.ArgumentParser(description="Train the speech deepfake detector.")
-    p.add_argument("--example", action="store_true",
-                   help="train on the four bundled example clips (sanity run)")
-    p.add_argument("--data-dir", type=str, default=None,
-                   help="directory of audio files (e.g. .../ASVspoof2021_LA_eval/flac)")
-    p.add_argument("--metadata", type=str, default=None,
-                   help="ASVspoof trial_metadata.txt path")
-    p.add_argument("--audio-ext", type=str, default=".flac",
-                   help="audio file extension for the real data (default .flac)")
+    p.add_argument("--example", action="store_true", help="train on the four demo clips")
+    p.add_argument("--data-dir", type=str, default=None, help="directory of audio files")
+    p.add_argument("--metadata", type=str, default=None, help="trial_metadata.txt path")
+    p.add_argument("--audio-ext", type=str, default=".flac", help="audio file extension")
     p.add_argument("--epochs", type=int, default=20)
     p.add_argument("--batch-size", type=int, default=64)
     p.add_argument("--lr", type=float, default=1e-3)
     p.add_argument("--max-frames", type=int, default=96)
     p.add_argument("--val-frac", type=float, default=0.2)
-    p.add_argument("--balance", action="store_true",
-                   help="use inverse-frequency class weights (recommended on full ASVspoof)")
-    p.add_argument("--limit", type=int, default=None,
-                   help="cap number of utterances (quick smoke-test)")
+    p.add_argument("--balance", action="store_true", help="use class weights")
+    p.add_argument("--limit", type=int, default=None, help="cap number of clips")
     p.add_argument("--num-workers", type=int, default=2)
     p.add_argument("--seed", type=int, default=0)
-    p.add_argument("--device", type=str, default=None, help="cuda | cpu (auto if unset)")
-    p.add_argument("--out", type=str, default=str(DEFAULT_OUT),
-                   help="output weights path (default pm/model/weights/model.pt)")
+    p.add_argument("--device", type=str, default=None, help="cuda or cpu")
+    p.add_argument("--out", type=str, default=str(DEFAULT_OUT), help="output weights path")
     return p.parse_args(argv)
 
 

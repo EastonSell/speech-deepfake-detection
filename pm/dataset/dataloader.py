@@ -1,11 +1,11 @@
 from pathlib import Path
+
 import numpy as np
 import soundfile as sf
 import torch
 from torch.utils.data import DataLoader, Dataset
 
-
-LABEL_TO_ID = {"spoof": 0, "bonafide": 1}
+LABEL_TO_ID = {"fake": 0, "real": 1}
 
 
 class ASVspoofAudioDataset(Dataset):
@@ -45,15 +45,6 @@ def get_data_loaders(base_path=None, name="example", batch_size=2):
 
 
 def read_protocol(protocol_path):
-    """Parse an ASVspoof-style trial-metadata file.
-
-    Expected (whitespace-separated) columns:
-        speaker_id trial_id codec transmission attack label trim subset
-
-    The official ASVspoof 2021 LA keys file can carry extra trailing columns, so
-    we read the first eight fields and ignore the rest. Blank or malformed lines,
-    and any row whose label is not in ``LABEL_TO_ID``, are skipped.
-    """
     records = []
     with Path(protocol_path).open("r", encoding="utf-8") as f:
         for line in f:
@@ -61,7 +52,8 @@ def read_protocol(protocol_path):
             if len(parts) < 8:
                 continue
             speaker_id, trial_id, codec, transmission, attack, label, trim, subset = parts[:8]
-            if label not in LABEL_TO_ID:
+            label = normalize_label(label)
+            if label is None:
                 continue
             records.append(
                 {
@@ -78,6 +70,15 @@ def read_protocol(protocol_path):
     return records
 
 
+def normalize_label(label):
+    label = label.lower()
+    if label in {"fake", "spoof"}:
+        return "fake"
+    if label == "real" or label.startswith("bona"):
+        return "real"
+    return None
+
+
 def load_audio(path):
     waveform, sample_rate = sf.read(str(path), dtype="float32")
     if waveform.ndim > 1:
@@ -85,7 +86,7 @@ def load_audio(path):
     return waveform, sample_rate
 
 
-FRAME_SAMPLES = 400   # fixed window so 8 kHz and 16 kHz files yield identical freq-bin width
+FRAME_SAMPLES = 400
 HOP_SAMPLES = 160
 
 

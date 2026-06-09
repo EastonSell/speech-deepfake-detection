@@ -1,2 +1,0 @@
-"""Speech deepfake detection"""
-

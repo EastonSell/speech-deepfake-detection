@@ -1,4 +1,4 @@
-LA_0001 LA_E_0000001 none loc_tx bonafide bonafide notrim eval
-LA_0002 LA_E_0000002 alaw ita_tx A07 spoof notrim eval
-LA_0003 LA_E_0000003 g722 sin_tx bonafide bonafide notrim progress
-LA_0004 LA_E_0000004 gsm mad_tx A09 spoof notrim eval
+LA_0001 LA_E_0000001 none loc_tx real real notrim eval
+LA_0002 LA_E_0000002 alaw ita_tx A07 fake notrim eval
+LA_0003 LA_E_0000003 g722 sin_tx real real notrim progress
+LA_0004 LA_E_0000004 gsm mad_tx A09 fake notrim eval
