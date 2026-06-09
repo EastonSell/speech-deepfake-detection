@@ -65,21 +65,21 @@ Weights are ignored by Git because real trained checkpoints can get large. After
 
 ## Results
 
-For the quick local result included in this repo, I trained the same model on a small balanced subset made from the local ASVspoof archives. After filtering unreadable local files, the subset had 604 usable clips. I used an 80/20 train/held-out split, so the numbers below are from 120 held-out clips. These are not final full-dataset results, but they show the pipeline works end to end.
+For the quick local result included in this repo, I trained the same model on a small balanced subset made from the local ASVspoof archives. After filtering unreadable local files, the subset had 604 usable clips. I used an 80/20 train/held-out split, so the numbers below are from 120 held-out clips. The metrics below are for compressed 2-bit spectrograms
 
 | Metric | Value |
 | --- | ---: |
-| Equal Error Rate | 0.424 |
-| Accuracy | 0.525 |
-| Precision | 0.449 |
-| Recall | 0.620 |
-| F1 | 0.521 |
+| Equal Error Rate | 0.24 |
+| Accuracy | 0.74 |
+| Precision | 0.71 |
+| Recall | 0.84 |
+| F1 | 0.77 |
 
 The main metric is Equal Error Rate because it is commonly used for speech fake detection. I also report accuracy, precision, recall, and F1 because they are easier to explain in the presentation. For this project, `fake` is treated as the positive class.
 
-![Prediction examples](./assets/eval_figures/predictions.png)
+![Prediction examples](./assets/eval_figures/predictions_2bit.png)
 
-![Confusion matrix](./assets/eval_figures/confusion.png)
+![Confusion matrix](./assets/eval_figures/confusion_2bit.png)
 
 ## Notebooks
 
