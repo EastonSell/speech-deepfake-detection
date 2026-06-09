@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "pm"
 version = "0.1.0"
-description = "Speech deepfake detection project milestone package"
+description = "Speech deepfake detection"
 readme = "README.md"
 requires-python = ">=3.9"
 license = { file = "LICENSE" }
@@ -17,8 +17,6 @@ dependencies = [
     "jupyter",
     "notebook",
     "matplotlib",
-    "pytorch-lightning",
-    "torchmetrics",
 ]
 
 [tool.setuptools.packages.find]

@@ -9,3 +9,15 @@ build/
 venv/
 .ipynb_checkpoints/
 .DS_Store
+
+# Trained model weights (produced by pm/train_model.py on the cluster; keep the
+# folder via .gitkeep but don't version the binaries)
+pm/model/weights/*.pt
+pm/model/weights/*.pth
+pm/model/weights/*.ckpt
+
+# Raw datasets / archives (download to pm/dataset/ on Talapas, don't commit)
+pm/dataset/*.tar.gz
+pm/dataset/ASVspoof2021_LA_eval/
+pm/dataset/keys/
+*.flac

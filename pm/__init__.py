@@ -1,2 +1,2 @@
-"""Speech deepfake detection milestone package."""
+"""Speech deepfake detection"""
 
