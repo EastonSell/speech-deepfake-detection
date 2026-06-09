@@ -7,7 +7,7 @@ name = "pm"
 version = "0.1.0"
 description = "Speech deepfake detection"
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.8.16"
 license = { file = "LICENSE" }
 dependencies = [
     "numpy",
