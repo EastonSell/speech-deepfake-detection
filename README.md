@@ -91,3 +91,14 @@ The main metric is Equal Error Rate because it is commonly used for speech fake 
 This model is intentionally small. It only looks at a short fixed window of each audio clip, so it may miss longer speech patterns. It is also trained on ASVspoof-style data, so it may not work as well on phone recordings, noisy real-world clips, or fake voices made by newer systems. The local result is only a small subset result. The full Talapas run should be used for the final presentation results.
 
 This detector should be used as a screening tool, not as proof that a recording is fake. A real system would need more data, stronger evaluation, and checks across different recording conditions before it could be trusted outside a class project.
+
+
+### Split provenance for new training runs
+
+Training writes a JSON sidecar named `<weights>.split.<checkpoint-sha256>.<manifest-sha256>.json` before replacing the weights file. It records the exact ordered training and validation protocol records and indices after `--limit`, the protocol file SHA-256, seed, split fraction, limit, and checkpoint SHA-256. Retain the sidecar with the checkpoint. Verify the checkpoint's SHA-256 equals `checkpoint_sha256` before using a manifest; interrupted saves can leave orphan sidecars. Do not run concurrent writers to the same output path; each run must use a separate output path. Keep the particular manifest printed for the run: identical checkpoint bytes can have multiple different manifests, so matching a digest alone cannot identify which run produced them. Existing checkpoints do not acquire historical membership from this change.
+
+Duplicate trial IDs are rejected before splitting. This is a **record-level** safeguard, not a speaker-disjoint split or detection of duplicate/re-encoded audio under different IDs; evaluate those separately. Training class weights use only the training partition. `--val-frac 0` disables validation rather than reporting training-set metrics as validation. For a validation set containing only one class, EER is `nan` and is not a valid estimate; the split is not stratified.
+
+The protocol file must remain stable while a run starts; pre/post hashes detect ordinary changes but are not an atomic snapshot. The manifest does not hash audio bytes and does not by itself make a full training run reproducible.
+
+Checkpoint publication atomically replaces the destination inode. On POSIX systems the resulting checkpoint is private (at most mode `0600`, subject to umask), even when replacing a more permissive file; adjust permissions deliberately afterward if needed. A symlink used as the output path is rejected rather than followed; select its intended target path explicitly. Publication assumes a trusted output directory and a single writer. Existing hard links, ownership, ACLs, and extended attributes are not preserved.

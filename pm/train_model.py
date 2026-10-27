@@ -10,6 +10,7 @@ from torch.utils.data import DataLoader, random_split
 
 from pm.dataset.dataloader import ASVspoofAudioDataset, LABEL_TO_ID
 from pm.model.model import AudioClassifier
+from pm.split_provenance import build_manifest, publish_checkpoint, validate_records, sha256_file
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_OUT = REPO_ROOT / "pm" / "model" / "weights" / "model.pt"
@@ -74,9 +75,9 @@ def build_dataset(args):
     )
 
 
-def class_weights(dataset, device):
+def class_weights(records, device):
     counts = np.zeros(len(LABEL_TO_ID), dtype=float)
-    for rec in dataset.records:
+    for rec in records:
         counts[LABEL_TO_ID[rec["label"]]] += 1
     counts = np.clip(counts, 1, None)
     weights = counts.sum() / (len(counts) * counts)
@@ -91,9 +92,22 @@ def train(args):
         args.device if args.device else ("cuda" if torch.cuda.is_available() else "cpu")
     )
 
+    if args.limit is not None and args.limit <= 0:
+        raise ValueError("--limit must be positive")
+    metadata_path = (REPO_ROOT / "assets" / "trial_metadata.txt" if args.example
+                     else Path(args.metadata) if args.metadata else None)
+    if metadata_path is None:
+        raise SystemExit("Provide --data-dir and --metadata, or use --example.")
+    metadata_sha256 = sha256_file(metadata_path)
     dataset = build_dataset(args)
     if args.limit and args.limit < len(dataset):
         dataset.records = dataset.records[: args.limit]
+
+    if not 0 <= args.val_frac < 1:
+        raise ValueError("--val-frac must be at least 0 and less than 1")
+    if not len(dataset):
+        raise ValueError("dataset contains no records")
+    validate_records(dataset.records)
 
     n_val = int(len(dataset) * args.val_frac)
     if args.val_frac > 0 and len(dataset) > 1:
@@ -109,17 +123,23 @@ def train(args):
             generator=torch.Generator().manual_seed(args.seed),
         )
     else:
-        train_ds, val_ds = dataset, dataset
+        train_ds, val_ds = dataset, None
+
+    train_indices = list(train_ds.indices) if n_val else list(range(len(dataset)))
+    val_indices = list(val_ds.indices) if n_val else []
+    manifest = build_manifest(dataset.records, train_indices, val_indices,
+                              dataset.protocol_path, args.seed, args.val_frac, args.limit,
+                              expected_metadata_sha256=metadata_sha256)
 
     train_loader = DataLoader(
         train_ds, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers
     )
-    val_loader = DataLoader(
+    val_loader = (DataLoader(
         val_ds, batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers
-    )
+    ) if val_ds is not None else None)
 
     model = AudioClassifier(num_classes=len(LABEL_TO_ID)).to(device)
-    weight = class_weights(dataset, device) if args.balance else None
+    weight = class_weights([dataset.records[i] for i in train_indices], device) if args.balance else None
     criterion = nn.CrossEntropyLoss(weight=weight)
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
 
@@ -140,16 +160,19 @@ def train(args):
             running += loss.item() * x.size(0)
 
         train_loss = running / max(n_train, 1)
-        val_acc, val_eer = evaluate(model, val_loader, device)
-        print(
-            f"epoch {epoch:3d} | train_loss {train_loss:.4f} | "
-            f"val_acc {val_acc:.3f} | val_eer {val_eer:.3f}"
-        )
+        if val_loader is None:
+            print(f"epoch {epoch:3d} | train_loss {train_loss:.4f} | validation disabled")
+        else:
+            val_acc, val_eer = evaluate(model, val_loader, device)
+            print(
+                f"epoch {epoch:3d} | train_loss {train_loss:.4f} | "
+                f"val_acc {val_acc:.3f} | val_eer {val_eer:.3f}"
+            )
 
     out_path = Path(args.out)
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    torch.save(model.state_dict(), out_path)
+    sidecar = publish_checkpoint(out_path, manifest, lambda path: torch.save(model.state_dict(), path))
     print(f"saved weights -> {out_path}")
+    print(f"saved split manifest -> {sidecar}")
     return model
 
 
@@ -179,3 +202,4 @@ def main(argv=None):
 
 if __name__ == "__main__":
     main()
+
