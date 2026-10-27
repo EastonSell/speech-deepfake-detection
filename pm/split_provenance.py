@@ -65,6 +65,8 @@ def publish_checkpoint(out_path, manifest, save_weights):
     sidecars are possible if the process fails before checkpoint replacement.
     """
     out_path = Path(out_path)
+    if out_path.is_symlink():
+        raise ValueError('checkpoint output must not be a symlink')
     out_path.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.NamedTemporaryFile(dir=out_path.parent, prefix='weights-', delete=False) as stream:
         temp_path = Path(stream.name)
