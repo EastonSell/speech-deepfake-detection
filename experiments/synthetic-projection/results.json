@@ -1,0 +1,90 @@
+{
+  "synthetic_only": true,
+  "train_n": 40,
+  "dev_n": 100,
+  "test_n": 100,
+  "unprojected": {
+    "rank": 8,
+    "correct": 91,
+    "total": 100,
+    "accuracy": 0.91
+  },
+  "pca_delete_4": {
+    "rank": 4,
+    "correct": 80,
+    "total": 100,
+    "accuracy": 0.8
+  },
+  "random_delete_4": [
+    {
+      "seed": 10,
+      "rank": 8,
+      "correct": 91,
+      "total": 100,
+      "accuracy": 0.91
+    },
+    {
+      "seed": 11,
+      "rank": 8,
+      "correct": 91,
+      "total": 100,
+      "accuracy": 0.91
+    },
+    {
+      "seed": 12,
+      "rank": 8,
+      "correct": 91,
+      "total": 100,
+      "accuracy": 0.91
+    },
+    {
+      "seed": 13,
+      "rank": 8,
+      "correct": 91,
+      "total": 100,
+      "accuracy": 0.91
+    },
+    {
+      "seed": 14,
+      "rank": 8,
+      "correct": 91,
+      "total": 100,
+      "accuracy": 0.91
+    },
+    {
+      "seed": 15,
+      "rank": 8,
+      "correct": 91,
+      "total": 100,
+      "accuracy": 0.91
+    },
+    {
+      "seed": 16,
+      "rank": 8,
+      "correct": 91,
+      "total": 100,
+      "accuracy": 0.91
+    },
+    {
+      "seed": 17,
+      "rank": 8,
+      "correct": 91,
+      "total": 100,
+      "accuracy": 0.91
+    },
+    {
+      "seed": 18,
+      "rank": 8,
+      "correct": 91,
+      "total": 100,
+      "accuracy": 0.91
+    },
+    {
+      "seed": 19,
+      "rank": 8,
+      "correct": 91,
+      "total": 100,
+      "accuracy": 0.91
+    }
+  ]
+}
