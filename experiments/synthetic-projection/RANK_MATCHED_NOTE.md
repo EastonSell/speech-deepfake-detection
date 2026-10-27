@@ -1,0 +1,10 @@
+# Exploratory synthetic control: interpretation
+
+This follow-on was designed after inspecting the original synthetic outcome and is exploratory, not independent confirmation. Its protocol was written and hashed before this follow-on was run. No speech audio, detector, or checkpoint was evaluated. One fixed synthetic dataset and ten random directions are not ten independent datasets, and do not give a confidence interval.
+
+The prior ambient random projector and PCA projector both remove four ambient dimensions, but their projected training feature ranks are 8 and 4, respectively. The new row-space controls each yield rank 4, matching PCA on that specific property. They do not match removed variance, retained spectrum, conditioning, or task signal. The ten seeds vary the projection conditional on the same dataset. Centering uses training data only; the ridge readout has no intercept, so centering shifts the latent true decision boundary relative to the fitted model. This is part of the existing synthetic setup, not a general recommendation.
+
+Observed for this fixed synthetic draw: PCA removes 71.8% of centered training energy and scores 80/100; rank-matched row-space controls remove 47.4–55.5% and score 56–80/100. These descriptive numbers cannot establish speech-deepfake detection performance or causal generality. Full results and seeds are in rank_matched_results.json. Independent review was performed before publication.
+
+The protocol was fixed locally before this run, but was not independently registered; it followed inspection of the original results. The observed run used Python 3.12.14 and NumPy 2.3.5 with OpenBLAS 0.3.30. Numerical SVD basis signs or rotations across environments may change the exact seeded controls. After review, stricter absolute-only projector checks and a deletion-rank guard were added; the saved result was not changed and the rerun matched it byte-for-byte.
+Run with normal Python (not python -O): diagnostic guards use assert and are disabled under optimization.
