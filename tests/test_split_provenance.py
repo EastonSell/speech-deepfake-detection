@@ -79,3 +79,33 @@ class SplitProvenanceTests(unittest.TestCase):
                 with self.assertRaises(OSError):
                     publish_checkpoint(out, {'train': [2]}, lambda p: Path(p).write_bytes(b'weights'))
             self.assertEqual(first.read_bytes(), original)
+
+    def test_existing_checkpoint_is_replaced_with_private_mode(self):
+        import stat
+        with tempfile.TemporaryDirectory() as d:
+            out=Path(d)/'model.pt'; out.write_bytes(b'old'); out.chmod(0o640)
+            publish_checkpoint(out, {}, lambda p: Path(p).write_bytes(b'new'))
+            self.assertEqual(stat.S_IMODE(out.stat().st_mode) & ~0o600, 0)
+
+    def test_new_checkpoint_is_private(self):
+        import stat
+        with tempfile.TemporaryDirectory() as d:
+            out=Path(d)/'model.pt'
+            publish_checkpoint(out, {}, lambda p: Path(p).write_bytes(b'new'))
+            self.assertEqual(stat.S_IMODE(out.stat().st_mode) & ~0o600, 0)
+
+    def test_symlink_checkpoint_is_rejected_without_touching_target(self):
+        with tempfile.TemporaryDirectory() as d:
+            target=Path(d)/'target'; target.write_bytes(b'old')
+            out=Path(d)/'model.pt'; out.symlink_to(target)
+            with self.assertRaisesRegex(ValueError, 'symlink'):
+                publish_checkpoint(out, {}, lambda p: Path(p).write_bytes(b'new'))
+            self.assertTrue(out.is_symlink())
+            self.assertEqual(target.read_bytes(), b'old')
+
+    def test_dangling_output_symlink_is_rejected(self):
+        with tempfile.TemporaryDirectory() as d:
+            out=Path(d)/'model.pt'; out.symlink_to(Path(d)/'missing')
+            with self.assertRaisesRegex(ValueError, 'symlink'):
+                publish_checkpoint(out, {}, lambda p: Path(p).write_bytes(b'new'))
+            self.assertTrue(out.is_symlink())
